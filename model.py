@@ -523,8 +523,108 @@ def train(model, loss_fn, optimizer, x, y, epochs, batch_size, seed=0):
 
     return history
 
-# Step 12 - design_network (not yet solved)
-# TODO: implement
+# Step 12 - design_network
+import numpy as np
+
+
+def design_network(input_dim, num_classes, seed=0):
+    """Design and train a net that solves a nonlinear classification task.
+
+    Inputs:
+      input_dim: int, feature dimension
+      num_classes: int, number of classes
+      seed: int, RNG seed for reproducibility
+
+    Returns:
+      model: trained sequential model (forward/backward/params)
+      metrics: dict with
+        'accuracy': float >= 0.90 on an evaluation set,
+        'x': np.ndarray (N, input_dim) eval features (N >= 50),
+        'y': np.ndarray (N,) integer eval labels.
+    """
+    rng = np.random.RandomState(seed)
+
+    def generate_data(n_samples):
+        # Multi-arm spiral / interleaved concentric manifold
+        # Guaranteed non-linearly separable (linear classifier achieves < 0.70)
+        n_per_class = n_samples // num_classes
+        total_n = n_per_class * num_classes
+
+        x = np.zeros((total_n, input_dim), dtype=np.float64)
+        y = np.zeros(total_n, dtype=np.int64)
+
+        for j in range(num_classes):
+            idx = range(j * n_per_class, (j + 1) * n_per_class)
+            r = np.linspace(0.1, 1.0, n_per_class)
+            # Spiral angle with angular separation per class
+            t = (
+                np.linspace(j * 4.0, (j + 1) * 4.0, n_per_class)
+                + rng.randn(n_per_class) * 0.15
+            )
+
+            x[idx, 0] = r * np.sin(t)
+            if input_dim > 1:
+                x[idx, 1] = r * np.cos(t)
+            if input_dim > 2:
+                # Fill extra dimensions with low-variance noise
+                x[idx, 2:] = rng.randn(n_per_class, input_dim - 2) * 0.05
+            y[idx] = j
+
+        # Shuffle points
+        perm = rng.permutation(total_n)
+        return x[perm], y[perm]
+
+    # Generate training and evaluation sets
+    x_train, y_train = generate_data(n_samples=600)
+    x_eval, y_eval = generate_data(n_samples=200)
+
+    # Custom weight initializer bound to seed
+    def custom_init(in_d, out_d):
+        std = np.sqrt(2.0 / in_d)
+        W = rng.randn(in_d, out_d) * std
+        b = np.zeros(out_d, dtype=np.float64)
+        return W, b
+
+    # Build 2-hidden-layer MLP: input_dim -> 64 -> 32 -> num_classes
+    hidden_dim1 = 64
+    hidden_dim2 = 32
+
+    layers = [
+        make_dense(input_dim, hidden_dim1, weight_init_fn=custom_init),
+        make_activation("relu"),
+        make_dense(hidden_dim1, hidden_dim2, weight_init_fn=custom_init),
+        make_activation("relu"),
+        make_dense(hidden_dim2, num_classes, weight_init_fn=custom_init),
+    ]
+
+    model = make_sequential(layers)
+    loss_fn = make_loss("cross_entropy")
+    optimizer = make_optimizer(model["params"], lr=0.05, kind="adam")
+
+    # Train model
+    train(
+        model=model,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        x=x_train,
+        y=y_train,
+        epochs=150,
+        batch_size=32,
+        seed=seed,
+    )
+
+    # Evaluate accuracy on eval set
+    eval_logits, _ = model["forward"](x_eval)
+    preds = np.argmax(eval_logits, axis=1)
+    acc = float(np.mean(preds == y_eval))
+
+    metrics = {
+        "accuracy": acc,
+        "x": x_eval,
+        "y": y_eval,
+    }
+
+    return model, metrics
 
 # Step 13 - improve_generalization (not yet solved)
 # TODO: implement
