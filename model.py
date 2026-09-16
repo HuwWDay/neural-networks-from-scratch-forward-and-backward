@@ -115,8 +115,82 @@ def make_dense(in_dim, out_dim, weight_init_fn=None):
 
     return {"params": params, "forward": forward, "backward": backward}
 
-# Step 4 - make_activation (not yet solved)
-# TODO: implement
+# Step 4 - make_activation
+import numpy as np
+
+
+def make_activation(kind="relu"):
+    """Create a genuinely nonlinear elementwise activation layer.
+
+    Args:
+        kind: str nonlinearity name. Default 'relu' must implement ReLU
+          (zero negatives, pass non-negatives). Other kinds optional ('sigmoid',
+          'tanh').
+
+    Returns:
+        Layer dict with:
+          forward(x) -> (y, cache)
+            x, y: np.ndarray shape (batch, dim)
+          backward(dout, cache) -> (dx, {})
+            dout, dx: np.ndarray shape (batch, dim)
+            param grad dict is always empty (no learnable params)
+
+    Must be elementwise and non-affine; analytic dx must match
+    numerical_gradient / gradient_check.
+    """
+    kind = kind.lower()
+
+    if kind == "relu":
+
+        def forward(x):
+            y = np.maximum(0, x)
+            cache = x
+            return y, cache
+
+        def backward(dout, cache):
+            x = cache
+            # Derivative is 1 for x > 0, 0 for x <= 0
+            dx = dout * (x > 0)
+            return dx, {}
+
+    elif kind == "sigmoid":
+
+        def forward(x):
+            # Numerically stable sigmoid
+            pos_mask = x >= 0
+            neg_mask = ~pos_mask
+            y = np.empty_like(x, dtype=np.float64)
+            y[pos_mask] = 1.0 / (1.0 + np.exp(-x[pos_mask]))
+            exp_x = np.exp(x[neg_mask])
+            y[neg_mask] = exp_x / (1.0 + exp_x)
+            cache = y
+            return y, cache
+
+        def backward(dout, cache):
+            y = cache
+            dx = dout * y * (1.0 - y)
+            return dx, {}
+
+    elif kind == "tanh":
+
+        def forward(x):
+            y = np.tanh(x)
+            cache = y
+            return y, cache
+
+        def backward(dout, cache):
+            y = cache
+            dx = dout * (1.0 - y**2)
+            return dx, {}
+
+    else:
+        raise ValueError(f"Unsupported activation kind: {kind}")
+
+    return {
+        "params": {},
+        "forward": forward,
+        "backward": backward,
+    }
 
 # Step 5 - initialize_weights (not yet solved)
 # TODO: implement
