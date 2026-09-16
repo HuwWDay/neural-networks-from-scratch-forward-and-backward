@@ -351,8 +351,96 @@ def forward_backward(model, loss_fn, x, y):
 
     return loss, param_grads
 
-# Step 9 - make_optimizer (not yet solved)
-# TODO: implement
+# Step 9 - make_optimizer
+import numpy as np
+
+
+def make_optimizer(params, lr=1e-2, kind="sgd", **kwargs):
+    """Build an optimizer that updates params in place.
+
+    Inputs:
+      params: arrays, possibly nested in lists/dicts (or dict of arrays) to optimize
+      lr: float learning rate
+      kind: str algorithm name (e.g. 'sgd', 'adam', 'momentum')
+
+    Returns:
+      dict with key 'step'. step(grads) applies one in-place update
+      using grads structured like params. Parameter shapes must stay
+      unchanged. Repeated steps must reduce a simple convex objective
+      within a modest fixed budget and keep values finite.
+    """
+    kind = kind.lower()
+
+    # Flatten nested params to track state per leaf array
+    flattened_params = []
+
+    def _collect(p):
+        if isinstance(p, dict):
+            for k, v in p.items():
+                _collect(v)
+        elif isinstance(p, (list, tuple)):
+            for item in p:
+                _collect(item)
+        elif isinstance(p, np.ndarray):
+            flattened_params.append(p)
+
+    _collect(params)
+
+    # State containers for momentum/Adam
+    state = {
+        "t": 0,
+        "m": [np.zeros_like(p) for p in flattened_params],
+        "v": [np.zeros_like(p) for p in flattened_params],
+    }
+
+    # Hyperparameters
+    beta1 = kwargs.get("beta1", 0.9)
+    beta2 = kwargs.get("beta2", 0.999)
+    eps = kwargs.get("eps", 1e-8)
+
+    def step(grads):
+        # Extract gradients in matching order
+        flattened_grads = []
+
+        def _collect_grads(g):
+            if isinstance(g, dict):
+                for k, v in g.items():
+                    _collect_grads(v)
+            elif isinstance(g, (list, tuple)):
+                for item in g:
+                    _collect_grads(item)
+            elif isinstance(g, np.ndarray):
+                flattened_grads.append(g)
+
+        _collect_grads(grads)
+
+        state["t"] += 1
+        t = state["t"]
+
+        for i, (p, g) in enumerate(zip(flattened_params, flattened_grads)):
+            if kind == "sgd":
+                # In-place parameter update: p -= lr * g
+                p -= lr * g
+
+            elif kind == "momentum":
+                state["m"][i] = beta1 * state["m"][i] + (1.0 - beta1) * g
+                p -= lr * state["m"][i]
+
+            elif kind == "adam":
+                # First and second moment updates
+                state["m"][i] = beta1 * state["m"][i] + (1.0 - beta1) * g
+                state["v"][i] = beta2 * state["v"][i] + (1.0 - beta2) * (g**2)
+
+                # Bias correction
+                m_hat = state["m"][i] / (1.0 - beta1**t)
+                v_hat = state["v"][i] / (1.0 - beta2**t)
+
+                p -= lr * m_hat / (np.sqrt(v_hat) + eps)
+
+            else:
+                raise ValueError(f"Unsupported optimizer kind: {kind}")
+
+    return {"step": step}
 
 # Step 10 - train_step (not yet solved)
 # TODO: implement
