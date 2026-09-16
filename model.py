@@ -192,8 +192,42 @@ def make_activation(kind="relu"):
         "backward": backward,
     }
 
-# Step 5 - initialize_weights (not yet solved)
-# TODO: implement
+# Step 5 - initialize_weights
+import numpy as np
+
+
+def initialize_weights(in_dim, out_dim, scheme="he"):
+    """Return (W, b) for a dense layer.
+
+    Inputs:
+      in_dim: int fan-in
+      out_dim: int fan-out
+      scheme: str initialization family (default 'he')
+
+    Returns:
+      W: np.ndarray shape (in_dim, out_dim), finite, symmetry-breaking,
+          scale stable with depth (fan-in dependent)
+      b: np.ndarray shape (out_dim,), near zero
+    """
+    scheme = scheme.lower()
+
+    if scheme in ("he", "kaiming"):
+        std = np.sqrt(2.0 / in_dim)
+        W = np.random.randn(in_dim, out_dim) * std
+
+    elif scheme in ("xavier", "glorot"):
+        std = np.sqrt(2.0 / (in_dim + out_dim))
+        W = np.random.randn(in_dim, out_dim) * std
+
+    elif scheme == "lecun":
+        std = np.sqrt(1.0 / in_dim)
+        W = np.random.randn(in_dim, out_dim) * std
+
+    else:
+        raise ValueError(f"Unsupported initialization scheme: {scheme}")
+
+    b = np.zeros(out_dim, dtype=np.float64)
+    return W.astype(np.float64), b
 
 # Step 6 - make_loss (not yet solved)
 # TODO: implement
