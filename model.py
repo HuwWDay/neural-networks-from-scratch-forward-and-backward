@@ -471,8 +471,57 @@ def train_step(model, loss_fn, optimizer, x_batch, y_batch):
 
     return float(loss)
 
-# Step 11 - train (not yet solved)
-# TODO: implement
+# Step 11 - train
+import numpy as np
+
+
+def train(model, loss_fn, optimizer, x, y, epochs, batch_size, seed=0):
+    """Run a deterministic minibatch training loop.
+
+    Inputs:
+      model: sequential model dict with 'forward', 'backward', 'params'
+      loss_fn: callable (logits, y) -> (loss, d_logits)
+      optimizer: dict with 'step'(grads) applying in-place parameter updates
+      x: np.ndarray of shape (N, D) training features
+      y: np.ndarray of shape (N,) integer class labels
+      epochs: int, number of full passes over the data
+      batch_size: int, minibatch size
+      seed: int, RNG seed for deterministic shuffling / batching
+
+    Returns:
+      history: list[float] of length `epochs`; history[t] is the mean
+      train_step loss over minibatches in epoch t.
+      Model parameters are updated in place; shapes unchanged.
+    """
+    n_samples = x.shape[0]
+    rng = np.random.RandomState(seed)
+    history = []
+
+    for _ in range(epochs):
+        indices = rng.permutation(n_samples)
+        epoch_losses = []
+
+        for start_idx in range(0, n_samples, batch_size):
+            batch_indices = indices[start_idx : start_idx + batch_size]
+            x_batch = x[batch_indices]
+            y_batch = y[batch_indices]
+
+            # 1. Forward pass
+            logits, caches = model["forward"](x_batch)
+
+            # 2. Compute loss and gradient w.r.t logits before parameter update
+            batch_loss, d_logits = loss_fn(logits, y_batch)
+            epoch_losses.append(batch_loss)
+
+            # 3. Backward pass
+            _, grads = model["backward"](d_logits, caches)
+
+            # 4. In-place parameter update
+            optimizer["step"](grads)
+
+        history.append(float(np.mean(epoch_losses)))
+
+    return history
 
 # Step 12 - design_network (not yet solved)
 # TODO: implement
