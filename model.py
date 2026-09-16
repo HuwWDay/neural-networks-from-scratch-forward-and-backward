@@ -229,8 +229,50 @@ def initialize_weights(in_dim, out_dim, scheme="he"):
     b = np.zeros(out_dim, dtype=np.float64)
     return W.astype(np.float64), b
 
-# Step 6 - make_loss (not yet solved)
-# TODO: implement
+# Step 6 - make_loss
+import numpy as np
+
+
+def make_loss(kind="cross_entropy"):
+    """Return a classification loss_fn(logits, labels) -> (loss, d_logits).
+
+    Inputs to loss_fn:
+      logits: (batch, C) float array of raw class scores
+      labels: (batch,) int array of class indices in [0, C)
+    Outputs:
+      loss: Python float, mean scalar loss over the batch (finite)
+      d_logits: (batch, C) gradient of loss w.r.t. logits (finite)
+    Must pass gradient_check, be minimized by confident correct predictions,
+    and stay finite under saturated logits.
+    """
+    if kind != "cross_entropy":
+        raise ValueError(f"Unsupported loss kind: {kind}")
+
+    def loss_fn(logits, labels):
+        batch_size = logits.shape[0]
+
+        # Shift logits for numerical stability against overflow: max(logits) along axis=1
+        shifted_logits = logits - np.max(logits, axis=1, keepdims=True)
+
+        # Compute stable softmax probabilities
+        exp_scores = np.exp(shifted_logits)
+        probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
+
+        # Log-sum-exp trick for stable negative log-likelihood calculation:
+        # log(probs[i, y_i]) = shifted_logits[i, y_i] - log(sum(exp(shifted_logits[i])))
+        log_sum_exp = np.log(np.sum(exp_scores, axis=1))
+        correct_class_logits = shifted_logits[np.arange(batch_size), labels]
+        loss = -np.mean(correct_class_logits - log_sum_exp)
+
+        # Gradient of categorical cross-entropy with softmax w.r.t. logits:
+        # dL/d(z_ik) = (probs[i, k] - 1{k == y_i}) / batch_size
+        d_logits = probs.copy()
+        d_logits[np.arange(batch_size), labels] -= 1.0
+        d_logits /= batch_size
+
+        return float(loss), d_logits
+
+    return loss_fn
 
 # Step 7 - make_sequential (not yet solved)
 # TODO: implement
