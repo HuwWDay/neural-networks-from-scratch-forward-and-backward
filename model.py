@@ -626,6 +626,117 @@ def design_network(input_dim, num_classes, seed=0):
 
     return model, metrics
 
-# Step 13 - improve_generalization (not yet solved)
-# TODO: implement
+# Step 13 - improve_generalization
+import copy
+import numpy as np
+
+
+def improve_generalization(
+    baseline_model_fn, x_train, y_train, x_val, y_val, seed=0
+):
+    """Improve held-out accuracy over an unregularized baseline.
+
+    Inputs:
+      baseline_model_fn: zero-arg callable -> fresh untrained sequential model
+        (dict with 'forward', 'backward', 'params') matching the data dims.
+      x_train, y_train: training features (N, D) and int labels (N,).
+      x_val, y_val: validation features (N_val, D) and int labels (N_val,).
+      seed: int for deterministic training.
+
+    Returns:
+      dict with keys:
+        'val_accuracy': float accuracy of the improved model on x_val/y_val
+        'baseline_val_accuracy': float val accuracy of plain unregularized SGD
+        'predictions': np.ndarray shape (N_val,) int preds from improved model
+        'model': the trained improved model
+    """
+    loss_fn = make_loss("cross_entropy")
+
+    # -------------------------------------------------------------
+    # 1. Baseline Model: Plain unregularized SGD prone to overfitting
+    # -------------------------------------------------------------
+    baseline_model = baseline_model_fn()
+    base_opt = make_optimizer(baseline_model["params"], lr=0.05, kind="sgd")
+
+    train(
+        model=baseline_model,
+        loss_fn=loss_fn,
+        optimizer=base_opt,
+        x=x_train,
+        y=y_train,
+        epochs=120,
+        batch_size=16,
+        seed=seed,
+    )
+
+    base_logits, _ = baseline_model["forward"](x_val)
+    base_preds = np.argmax(base_logits, axis=1)
+    baseline_val_acc = float(np.mean(base_preds == y_val))
+
+    # -------------------------------------------------------------
+    # 2. Improved Model: L2 weight decay + early stopping checkpointing
+    # -------------------------------------------------------------
+    improved_model = baseline_model_fn()
+    improved_opt = make_optimizer(
+        improved_model["params"], lr=0.01, kind="adam"
+    )
+
+    weight_decay = 1e-3
+    n_samples = x_train.shape[0]
+    batch_size = 32
+    epochs = 150
+    rng = np.random.RandomState(seed)
+
+    best_val_acc = -1.0
+    best_weights = None
+
+    for epoch in range(epochs):
+        perm = rng.permutation(n_samples)
+
+        for start_idx in range(0, n_samples, batch_size):
+            batch_idx = perm[start_idx : start_idx + batch_size]
+            xb = x_train[batch_idx]
+            yb = y_train[batch_idx]
+
+            # Forward pass
+            logits, caches = improved_model["forward"](xb)
+            _, d_logits = loss_fn(logits, yb)
+
+            # Backward pass
+            _, grads = improved_model["backward"](d_logits, caches)
+
+            # Apply L2 weight decay to 2D weight matrices (excluding 1D biases)
+            for p_dict, g_dict in zip(improved_model["params"], grads):
+                if "W" in p_dict and "W" in g_dict:
+                    g_dict["W"] += weight_decay * p_dict["W"]
+
+            improved_opt["step"](grads)
+
+        # Track validation accuracy for checkpointing / early stopping
+        val_logits, _ = improved_model["forward"](x_val)
+        val_acc = float(np.mean(np.argmax(val_logits, axis=1) == y_val))
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_weights = [
+                {k: v.copy() for k, v in layer_p.items()}
+                for layer_p in improved_model["params"]
+            ]
+
+    # Restore best checkpoint weights
+    if best_weights is not None:
+        for target_p, src_p in zip(improved_model["params"], best_weights):
+            for k, v in src_p.items():
+                np.copyto(target_p[k], v)
+
+    final_val_logits, _ = improved_model["forward"](x_val)
+    predictions = np.argmax(final_val_logits, axis=1)
+    val_accuracy = float(np.mean(predictions == y_val))
+
+    return {
+        "val_accuracy": val_accuracy,
+        "baseline_val_accuracy": baseline_val_acc,
+        "predictions": predictions,
+        "model": improved_model,
+    }
 
