@@ -442,8 +442,34 @@ def make_optimizer(params, lr=1e-2, kind="sgd", **kwargs):
 
     return {"step": step}
 
-# Step 10 - train_step (not yet solved)
-# TODO: implement
+# Step 10 - train_step
+def train_step(model, loss_fn, optimizer, x_batch, y_batch):
+    """Perform one complete optimization step over a minibatch.
+
+    Inputs:
+      model: sequential model dict with 'forward', 'backward', and 'params'
+      loss_fn: callable (logits, y) -> (loss, d_logits)
+      optimizer: dict with 'step'(grads) applying in-place parameter updates
+      x_batch: np.ndarray of shape (B, D)
+      y_batch: np.ndarray of shape (B,) integer class labels
+
+    Returns:
+      loss: float, scalar batch loss evaluated BEFORE the parameter update.
+      Model parameters are updated in place; shapes unchanged and values finite.
+    """
+    # 1. Forward sweep: compute logits and activation caches
+    logits, caches = model["forward"](x_batch)
+
+    # 2. Evaluate loss and seed upstream gradient w.r.t logits before updating
+    loss, d_logits = loss_fn(logits, y_batch)
+
+    # 3. Backward sweep: backpropagate gradients to every parameter
+    _, grads = model["backward"](d_logits, caches)
+
+    # 4. Update parameters in place
+    optimizer["step"](grads)
+
+    return float(loss)
 
 # Step 11 - train (not yet solved)
 # TODO: implement
