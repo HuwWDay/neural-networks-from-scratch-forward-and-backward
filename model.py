@@ -274,8 +274,54 @@ def make_loss(kind="cross_entropy"):
 
     return loss_fn
 
-# Step 7 - make_sequential (not yet solved)
-# TODO: implement
+# Step 7 - make_sequential
+def make_sequential(layers):
+    """Compose protocol-honoring layers into one sequential model.
+
+    Inputs:
+      layers: list of layer dicts, each with
+        forward(x) -> (y, cache),
+        backward(dout, cache) -> (dx, grads_dict),
+        params: dict of ndarrays (possibly empty).
+
+    Returns a dict with:
+      forward(x) -> (y, caches)
+        y: final activation after applying every layer in order
+        caches: opaque structure needed by backward
+      backward(dout, caches) -> (dx, grads_list)
+        dx: gradient w.r.t. the original input x
+        grads_list: list of length len(layers); grads_list[i] is the
+          grads_dict from layers[i] ({} for param-free layers)
+      params: aggregated live view of all layer params, length len(layers),
+        same order as layers (so in-place updates affect the model)
+    """
+    # Live view of parameter dicts in the same order as layers
+    params = [layer.get("params", {}) for layer in layers]
+
+    def forward(x):
+        caches = []
+        out = x
+        for layer in layers:
+            out, cache = layer["forward"](out)
+            caches.append(cache)
+        return out, caches
+
+    def backward(dout, caches):
+        grads_list = [None] * len(layers)
+        current_dout = dout
+
+        # Traverse backward in reverse topological order
+        for i in reversed(range(len(layers))):
+            current_dout, grads = layers[i]["backward"](current_dout, caches[i])
+            grads_list[i] = grads
+
+        return current_dout, grads_list
+
+    return {
+        "forward": forward,
+        "backward": backward,
+        "params": params,
+    }
 
 # Step 8 - forward_backward (not yet solved)
 # TODO: implement
